@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical"
+    android:layout_marginTop="20dp"
+    >
+
+
+
+    <android.support.v7.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="5dp"
+        android:layout_marginEnd="5dp"
+        app:cardCornerRadius="3dp"
+        >
+
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="10dp"
+            >
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginStart="20dp"
+
+                >
+
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:gravity="center_vertical"
+                    android:textSize="17sp"
+                    android:fontFamily="@font/montserrat_medium"
+                    android:text="@string/location"
+                    />
+
+                <android.support.v7.widget.CardView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginEnd="5dp"
+                    app:cardCornerRadius="4dp"
+                    >
+
+                    <Spinner
+                        android:id="@+id/location_spinner"
+                        android:layout_width="120dp"
+                        android:layout_height="40dp"
+                        android:prompt="@string/location"
+                        app:fontFamily="@font/montserrat_regular"
+                        android:background="@color/my_color_bg"
+                        />
+
+                </android.support.v7.widget.CardView>
+
+
+
+                <EditText
+                    android:inputType="number"
+                    android:hint="@string/max_price"
+                    android:textColorHint="@color/my_color_secondary"
+                    android:id="@+id/house_max_price_edit_text"
+                    android:layout_width="100dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="7dp"
+                    android:textSize="17sp"
+                    app:fontFamily="@font/montserrat_regular"
+                    android:gravity="center_horizontal"
+                    />
+
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="20dp"
+                android:layout_gravity="start"
+                >
+
+
+
+                <CheckBox
+                    android:id="@+id/for_rent_check_box"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/rent"
+                    app:fontFamily="@font/montserrat_regular"
+                    android:textSize="15sp"
+                    android:layout_marginEnd="10dp"
+                    />
+
+
+                <CheckBox
+                    android:id="@+id/for_sale_check_box"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/ForSale"
+                    app:fontFamily="@font/montserrat_regular"
+                    android:textSize="15sp"
+                    />
+
+
+
+
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/submit_houses_filter_button"
+                android:layout_marginTop="10dp"
+                android:layout_marginStart="20dp"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="@string/filter"
+                app:fontFamily="@font/montserrat_regular"
+                />
+
+        </LinearLayout>
+
+    </android.support.v7.widget.CardView>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/houses"
+        android:textSize="17sp"
+        app:fontFamily="@font/montserrat_medium"
+        android:gravity="center_horizontal"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="5dp"
+        />
+
+    <android.support.v4.widget.SwipeRefreshLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/houses_swipe_refresh"
+        >
+
+        <android.support.v7.widget.RecyclerView
+            android:layout_marginStart="7dp"
+            android:layout_marginEnd="7dp"
+            android:layout_marginTop="10dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:id="@+id/houses_activity_rec_view"
+            android:scrollbars="vertical"
+            />
+
+    </android.support.v4.widget.SwipeRefreshLayout>
+
+
+</LinearLayout>
