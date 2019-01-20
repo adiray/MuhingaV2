@@ -6,9 +6,12 @@ import android.os.Bundle;
 import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.util.Log;
+import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.Spinner;
 import android.widget.Toast;
 
 import com.mikepenz.fastadapter.adapters.FooterAdapter;
@@ -17,7 +20,6 @@ import com.mikepenz.fastadapter_extensions.items.ProgressItem;
 import com.mikepenz.fastadapter_extensions.scroll.EndlessRecyclerOnScrollListener;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,25 +33,38 @@ public class Houses extends AppCompatActivity {
 
     //miscellaneous objects
     Boolean onRefreshing = false, infiniteLoading = false;  //shows weather the user is refreshing or loading more items respectively
+    Boolean onFilteredRefreshing = false, filteredInfiniteLoading = false; //shows whether the user is refeshing or loading more filtered items;
+    ArrayList<String> queryStringsHolder = new ArrayList<>();
+    ArrayList<String> locationOptions = new ArrayList<String>();
+    String queryString = null;
+    StringBuilder mb = new StringBuilder();
+    Boolean isForRent = false;
+    Boolean isForSale = false, filteredState = false; //filtered state helps determine whether the user has applied filters to the items to be returned
 
     //declare view objects
     EditText housePriceEditText;
     CheckBox forRentCheck, forSaleCheck;
     Button filterHousesButton;
     SwipeRefreshLayout housesSwipeRefresh;  //swipe to refresh view for the houses recycler view
+    Spinner houseLocationSpinner;
 
     //declare recycler view objects
     RecyclerView housesMainRecView;
-    ArrayList<HousesResponse> allHousesResponseArray;   //holds all the houses objects that have been returned since the user last refreshed
+    ArrayList<HousesResponse> allHousesResponseArray, filteredHousesResponseArray;   //holds all the houses objects that have been returned since the user last refreshed
 
     //declare the retrofit objects. All these are used with retrofit
     Retrofit.Builder builder;
     Retrofit myRetrofit;
     RetrofitClient myWebClient;
-    retrofit2.Call<ArrayList<HousesResponse>> allHousesCall;
-    Map<String, String> housesFilterMap = Collections.synchronizedMap(new HashMap<String, String>());  //holds the dynamic parameters used in the request url query
-    Integer tableOffset = 0;   //this increases the offset from the top of the table when items are being retrieved from backendless
-    String tableOffsetString = tableOffset.toString();
+    retrofit2.Call<ArrayList<HousesResponse>> allHousesCall, filteredHousesCall, locationsCall;
+    //holds the dynamic parameters used in the request url query
+    Map<String, String> housesFilterMap = new HashMap<String, String>();
+    Map<String, String> housesUserFilterMap = new HashMap<>();
+    Map<String, String> locationsMap = new HashMap<>();  //holds the query for the locations
+
+
+    Integer tableOffset = 0, filteredTableOffset = 0;   //this increases the offset from the top of the table when items are being retrieved from backendless
+    String tableOffsetString = tableOffset.toString(), filteredTableOffsetString = filteredTableOffset.toString();
 
     //create our FastAdapter which will manage everything
     FastItemAdapter<HousesResponse> housesFastAdapter;
@@ -62,8 +77,15 @@ public class Houses extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_houses);
 
+
         //Initialize the views
         housesSwipeRefresh = findViewById(R.id.houses_swipe_refresh);
+        housePriceEditText = findViewById(R.id.house_max_price_edit_text);
+        forRentCheck = findViewById(R.id.for_rent_check_box);
+        forSaleCheck = findViewById(R.id.for_sale_check_box);
+        filterHousesButton = findViewById(R.id.submit_houses_filter_button);
+        houseLocationSpinner = findViewById(R.id.location_spinner);
+
 
         //build out the main recycler view
         housesMainRecView = findViewById(R.id.houses_activity_rec_view);
@@ -78,9 +100,17 @@ public class Houses extends AppCompatActivity {
             @Override
             public void onLoadMore(int currentPage) {
 
+
                 footerAdapter.clear();
                 footerAdapter.add(new ProgressItem().withEnabled(false));
-                loadMoreHouses();
+
+                //a statement to check if the user is loading more items that have been filtered or just loading more of all items unfiltered
+                if (filteredState) {
+                    loadMoreFilteredHouses();
+                } else {
+                    loadMoreHouses();
+                }
+
             }
         };
 
@@ -90,7 +120,12 @@ public class Houses extends AppCompatActivity {
             @Override
             public void onRefresh() {
 
-                refreshHouses();
+                //a statement to check if the user is refreshing items that have been filtered or just refreshing all items unfiltered
+                if (filteredState) {
+                    refreshFilteredHouses();
+                } else {
+                    refreshHouses();
+                }
                 Log.d("myLogsrefreshingvalue", onRefreshing.toString());
             }
 
@@ -106,15 +141,37 @@ public class Houses extends AppCompatActivity {
         housesFilterMap.put("offset", tableOffsetString);
         housesFilterMap.put("sortBy", "created%20desc");
 
+        // ItemAdapter<HousesResponse> mAdapter = new ItemAdapter<>();
+
+        //FastAdapterDiffUtil.set(housesFastAdapter,filteredHousesResponseArray,housesDiffUtilCallBack,false);
+
+        buildRetrofitClient();  //build the retrofit client
 
         requestHouses();    //make the initial / first  houses request
+
+        populateLocations();  //add the locations to the locations spinner
+
+
+        //add the onclick listener for the filter button
+        filterHousesButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+                getFilters();
+                requestFilteredHouses();
+                filteredState = true;
+
+            }
+        });
 
 
     }
 
 
-    void requestHouses() {
+    /*************************************************************************************************************************************************/
 
+
+    void buildRetrofitClient() {
 
         //initialize the retrofit client builder using the backendless.com api
         builder = new Retrofit.Builder();
@@ -129,7 +186,16 @@ public class Houses extends AppCompatActivity {
 
         //create your call using the retrofit client
         allHousesCall = myWebClient.getQueryHouses(housesFilterMap);
+        filteredHousesCall = myWebClient.getFilteredHouses(housesUserFilterMap);
+        locationsCall = myWebClient.getFilteredHouses(locationsMap);
 
+    }
+
+
+    /*************************************************************************************************************************************************/
+
+
+    void requestHouses() {
 
         //make the call
         allHousesCall.clone().enqueue(new Callback<ArrayList<HousesResponse>>() {
@@ -193,8 +259,11 @@ public class Houses extends AppCompatActivity {
 
     }
 
-    //method called when user attempts to refresh the houses recycler view
-    void refreshHouses() {
+    /*************************************************************************************************************************************************/
+
+
+    void refreshHouses() {    //method called when user attempts to refresh the houses recycler view
+
 
         tableOffset = 0;
         tableOffsetString = tableOffset.toString();
@@ -207,15 +276,18 @@ public class Houses extends AppCompatActivity {
         housesSwipeRefresh.setRefreshing(false);
 
 
-
-
         // housesMainRecView.addOnScrollListener(endlessRecyclerOnScrollListener);
         //onRefreshing = false;
 
     }
 
+
+    /*************************************************************************************************************************************************/
+
+
     void loadMoreHouses() {
 
+        //TODO The allHousesResponseArray exists just to give a count. Maybe the count could be more effectively stored in an integer value?
         tableOffset = allHousesResponseArray.size();
         tableOffsetString = tableOffset.toString();
         housesFilterMap.put("offset", tableOffsetString);    //update the value of the offset in the request url
@@ -225,15 +297,260 @@ public class Houses extends AppCompatActivity {
         requestHouses();
     }
 
+
+    /*************************************************************************************************************************************************/
+
+
+    void getFilters() {
+
+        //clear the query filter and the string builder mb
+        queryString = null;
+        mb.delete(0, mb.length());
+        queryStringsHolder.clear();
+
+        //the if statement checks if the house location spinner's selected item is 'all' and skips adding the query if it is
+        if (!houseLocationSpinner.getSelectedItem().equals("ALL")) {
+
+            //this adds "AND" to the query if it is appended to another query and adds nothing if it is alone
+            if (queryStringsHolder.isEmpty()) {
+                queryStringsHolder.add("Location%3D" + "'" + houseLocationSpinner.getSelectedItem().toString() + "'");
+            } else {
+                queryStringsHolder.add("%20AND%20Location%3D" + "'" + houseLocationSpinner.getSelectedItem().toString() + "'");
+            }
+        }
+
+
+        //this adds the data from the Price edit text
+        if (!housePriceEditText.getText().toString().isEmpty()) {
+
+            if (queryStringsHolder.isEmpty()) {
+                queryStringsHolder.add("price%3C%3D" + housePriceEditText.getText().toString());
+            } else {
+                queryStringsHolder.add("%20AND%20price%3C%3D" + housePriceEditText.getText().toString());
+            }
+
+        }
+
+
+        if (forRentCheck.isChecked()) {
+
+            if (queryStringsHolder.isEmpty()) {
+                isForRent = true;
+                queryStringsHolder.add("Rent%3D" + isForRent.toString());
+            } else {
+                isForRent = true;
+                queryStringsHolder.add("%20AND%20Rent%3D" + isForRent.toString());
+            }
+
+
+        }
+
+
+        if (forSaleCheck.isChecked()) {
+            if (queryStringsHolder.isEmpty()) {
+                isForSale = true;
+                queryStringsHolder.add("for_sale%3D" + isForSale.toString());
+            } else if (forRentCheck.isChecked()) {
+                isForSale = true;
+                queryStringsHolder.add("%20OR%20for_sale%3D" + isForSale.toString());
+            } else if (!forRentCheck.isChecked()) {
+                isForSale = true;
+                queryStringsHolder.add("%20AND%20for_sale3D" + isForSale.toString());
+            }
+
+
+        }
+
+
+        for (int i = 0; i < queryStringsHolder.size(); i++) {
+
+            mb.append(queryStringsHolder.get(i));
+
+        }
+
+        queryString = mb.toString();
+        Log.d(queryString, "mquery");
+
+
+        housesUserFilterMap.putAll(housesFilterMap);
+
+        //update the value of the offset in the request url before you make the call
+        filteredTableOffset = 0;
+        filteredTableOffsetString = filteredTableOffset.toString();
+        housesUserFilterMap.put("offset", filteredTableOffsetString);
+
+        housesUserFilterMap.put("where", queryString);
+
+        //ToDo What if the user refreshes a set of filtered calls?
+
+
+    }
+
+
+    /*************************************************************************************************************************************************/
+
+
+    void populateLocations() {
+
+        //add an All locations option for the user to select all available locations
+        locationOptions.add(getString(R.string.ALL));
+
+        locationsMap.put("props", "Location");
+
+        //initialize the spinner and assign it an adapter
+        ArrayAdapter<String> locationSpinnerAdapter = new ArrayAdapter<>(Houses.this, android.R.layout.simple_spinner_item, locationOptions);
+        //set the layout resource for the spinner adapter
+        locationSpinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        houseLocationSpinner.setAdapter(locationSpinnerAdapter);
+
+        locationsCall.clone().enqueue(new Callback<ArrayList<HousesResponse>>() {
+            @Override
+            public void onResponse(Call<ArrayList<HousesResponse>> call, Response<ArrayList<HousesResponse>> response) {
+
+                String stringHolder;
+                int rSize = response.body().size();
+
+                //a for statement to cycle through the response and add every unique location to the locationOptions array
+                for (int counter = 0; counter < rSize; counter++) {
+                    stringHolder = response.body().get(counter).getLocation();
+                    if (!locationOptions.contains(stringHolder)) {
+                        locationOptions.add(stringHolder);
+                    }
+                }
+
+
+            }
+
+            @Override
+            public void onFailure(Call<ArrayList<HousesResponse>> call, Throwable t) {
+
+                Toast.makeText(Houses.this, "No locations Available", Toast.LENGTH_LONG).show();
+
+            }
+        });
+
+
+    }
+
+
+    /*************************************************************************************************************************************************/
+
+
+    void requestFilteredHouses() {
+
+        filteredHousesCall.clone().enqueue(new Callback<ArrayList<HousesResponse>>() {
+            @Override
+            public void onResponse(Call<ArrayList<HousesResponse>> call, Response<ArrayList<HousesResponse>> response) {
+
+                //do not use the diffutil because it loads only ten items and there is no justification for it to filter only ten items.
+
+                if (response.isSuccessful()) {
+                    if (!filteredInfiniteLoading && !onFilteredRefreshing) {
+                        filteredHousesResponseArray = response.body();
+                        housesFastAdapter.clear();
+                        housesMainRecView.clearOnScrollListeners();
+                        housesMainRecView.addOnScrollListener(endlessRecyclerOnScrollListener);
+                        housesFastAdapter.add(response.body());
+                        endlessRecyclerOnScrollListener.resetPageCount();
+
+                    } else if (filteredInfiniteLoading && !onFilteredRefreshing) {
+
+                        filteredHousesResponseArray.addAll(response.body());
+                        footerAdapter.clear();
+                        if (response.body().size() > 0) {
+                            housesFastAdapter.add(response.body());
+                        } else {
+                            Toast.makeText(Houses.this, "No more items", Toast.LENGTH_LONG).show();
+                        }
+
+                        Log.d("myLogsRequestUrlFIL", response.raw().request().url().toString() + " table offset = " + tableOffset);
+                        filteredInfiniteLoading = false;
+
+
+                    } else if (onFilteredRefreshing && !filteredInfiniteLoading) {
+
+                        filteredHousesResponseArray.clear();
+                        filteredHousesResponseArray = response.body();
+                        housesFastAdapter.clear();
+                        housesMainRecView.clearOnScrollListeners();
+                        housesMainRecView.addOnScrollListener(endlessRecyclerOnScrollListener);
+                        housesFastAdapter.add(response.body());
+                        endlessRecyclerOnScrollListener.resetPageCount();
+
+
+                        Log.d("myLogsRequestUrlFOR", response.raw().request().url().toString());
+                    }
+                }
+              else {   Toast.makeText(Houses.this, "check the filters", Toast.LENGTH_LONG).show(); }
+
+            }
+
+            @Override
+            public void onFailure(Call<ArrayList<HousesResponse>> call, Throwable t) {
+
+                Log.d("myLogsFilteredFail", " Request has failed because " + t.getMessage());
+            }
+        });
+
+    }
+
+
+    /*************************************************************************************************************************************************/
+
+
+    void loadMoreFilteredHouses() {
+
+        filteredInfiniteLoading = true;
+        onFilteredRefreshing = false;
+        filteredTableOffset = filteredHousesResponseArray.size();
+        filteredTableOffsetString = filteredTableOffset.toString();
+        housesUserFilterMap.put("offset", filteredTableOffsetString);
+        requestFilteredHouses();
+
+    }
+
+
+    /*************************************************************************************************************************************************/
+
+    void refreshFilteredHouses() {
+
+
+        filteredTableOffset = 0;
+        filteredTableOffsetString = filteredTableOffset.toString();
+        housesUserFilterMap.put("offset", filteredTableOffsetString);  //update the value of the offset in the request url
+        onFilteredRefreshing = true;
+        filteredInfiniteLoading = false;
+        requestFilteredHouses();
+
+        //stop the refreshing animation
+        housesSwipeRefresh.setRefreshing(false);
+
+    }
+
 }
+
+
+
+
+
+
 
 /*  IMPORTANT INFORMATION
  * ISSUES
  * The infinite load will be triggered unexpectedly whenever the user refreshes the page because whenever the user refreshes
  * " endlessRecyclerOnScrollListener.resetPageCount(); "  is called which calls triggers the onLoadMore method
  *
- *
+ * Failed to find GeneratedAppGlideModule. You should include an annotationProcessor compile dependency on com.github.bumptech.glide:compiler in your application and a @GlideModule annotated AppGlideModule implementation or LibraryGlideModules will be silently ignored
+
  *
  *
  *
  * */
+
+
+
+/*
+declare the diffUtil objects
+    HousesDiffUtilCallBack housesDiffUtilCallBack;
+    FastAdapterDiffUtil mFastAdapterDiffUtil;
+*/
